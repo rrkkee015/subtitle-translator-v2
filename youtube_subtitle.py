@@ -108,15 +108,14 @@ def translate_subtitle(srt_filename):
     
     logger.info(f"자막 번역 중: {srt_filename}")
     
-    # subtitle.py 스크립트 실행
+    # subtitle.py 스크립트 실행 (stdout과 stderr를 파이프하지 않고 그대로 출력)
     result = subprocess.run(
         ["python", "subtitle.py", srt_filename],
-        capture_output=True,
         text=True
     )
     
     if result.returncode != 0:
-        logger.error(f"자막 번역 실패: {result.stderr}")
+        logger.error("자막 번역 실패")
         return False
     
     logger.info("자막 번역 완료")
