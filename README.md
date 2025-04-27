@@ -1,0 +1,137 @@
+# SRT 자막 번역 도구
+
+영어 SRT 자막 파일을 한국어로 번역하는 도구입니다. Claude API를 사용하여 자연스러운 번역을 제공합니다.
+
+## 주요 기능
+
+- SRT 파일 형식의 자막 번역 (영어 → 한국어)
+- 자막을 배치 단위로 처리하여 효율적인 번역
+- 병렬 처리를 통한 번역 속도 향상
+- 실시간 진행 상황 표시
+- 번역 비용 계산 및 통계 제공
+- 설정 파일을 통한 쉬운 커스터마이징
+
+## 요구 사항
+
+- Python 3.6 이상
+- Anthropic API 키 ([Claude API](https://anthropic.com/) 계정 필요)
+- 필요한 패키지: `anthropic`, `tqdm`
+
+```bash
+pip install anthropic tqdm
+```
+
+## 설정
+
+1. **API 키 설정**
+
+   환경 변수로 API 키를 설정하세요:
+
+   ```bash
+   # Linux/macOS
+   export ANTHROPIC_API_KEY=your_api_key_here
+
+   # Windows (CMD)
+   set ANTHROPIC_API_KEY=your_api_key_here
+
+   # Windows (PowerShell)
+   $env:ANTHROPIC_API_KEY="your_api_key_here"
+   ```
+
+2. **설정 파일 (선택사항)**
+
+   프로그램의 동작을 커스터마이징하려면 설정 파일을 사용할 수 있습니다. 기본 설정 파일은 `config.json`이며, 다음 명령어로 생성할 수 있습니다:
+
+   ```bash
+   python subtitle.py --gen-config
+   ```
+
+   설정 파일 예시:
+
+   ```json
+   {
+     "model": "claude-3-7-sonnet-20250219",
+     "batch_size": 5,
+     "max_tokens": 8000,
+     "max_workers": 3,
+     "input_token_cost": 0.000003,
+     "output_token_cost": 0.00000375
+   }
+   ```
+
+## 사용법
+
+### 기본 사용법
+
+```bash
+python subtitle.py path/to/your/subtitle.srt
+```
+
+결과 파일은 입력 파일과 같은 위치에 `[원본파일명]_ko.srt` 형식으로 저장됩니다.
+
+### 명령줄 옵션
+
+```bash
+python subtitle.py path/to/your/subtitle.srt [options]
+```
+
+옵션:
+- `-o, --output PATH`: 출력 파일 경로 지정
+- `-m, --model MODEL`: 사용할 Claude 모델 지정
+- `-b, --batch-size SIZE`: 자막 배치 크기 지정
+- `-w, --workers COUNT`: 병렬 처리 작업자 수 지정
+- `-c, --config PATH`: 사용자 설정 파일 경로 지정
+- `--gen-config`: 현재 설정으로 기본 설정 파일 생성 후 종료
+
+### 예시
+
+```bash
+# 기본 사용법
+python subtitle.py video.srt
+
+# 출력 파일 지정
+python subtitle.py video.srt -o translated_video.srt
+
+# 배치 크기 및 병렬 작업자 수 변경
+python subtitle.py video.srt -b 10 -w 5
+
+# 다른 모델 사용
+python subtitle.py video.srt -m claude-3-haiku-20240307
+
+# 사용자 설정 파일 사용
+python subtitle.py video.srt -c my_config.json
+```
+
+## 출력 예시
+
+프로그램 실행 시 다음과 같은 정보가 표시됩니다:
+
+```
+2023-05-01 15:30:45 - __main__ - INFO - 파일 'video.srt'을(를) 번역합니다...
+2023-05-01 15:30:45 - __main__ - INFO - 총 150개의 자막을 찾았습니다.
+2023-05-01 15:30:45 - __main__ - INFO - 자막을 30개의 배치로 나누었습니다.
+번역 진행 중: 100%|██████████| 30/30 [01:25<00:00,  2.85it/s]
+2023-05-01 15:32:10 - __main__ - INFO - 번역 완료! 결과가 video_ko.srt에 저장되었습니다.
+2023-05-01 15:32:10 - __main__ - INFO - 총 사용된 입력 토큰: 12500
+2023-05-01 15:32:10 - __main__ - INFO - 총 사용된 출력 토큰: 15800
+2023-05-01 15:32:10 - __main__ - INFO - 총 요금: $0.0968
+2023-05-01 15:32:10 - __main__ - INFO - 번역 완료 요약:
+2023-05-01 15:32:10 - __main__ - INFO - - 처리된 자막 수: 150
+2023-05-01 15:32:10 - __main__ - INFO - - 배치 수: 30
+2023-05-01 15:32:10 - __main__ - INFO - - 입력 토큰: 12500
+2023-05-01 15:32:10 - __main__ - INFO - - 출력 토큰: 15800
+2023-05-01 15:32:10 - __main__ - INFO - - 총 비용: $0.0968
+```
+
+## 주의사항
+
+- API 키는 절대 코드나 설정 파일에 직접 입력하지 마세요. 항상 환경 변수를 사용하세요.
+- 번역 비용은 Anthropic의 현재 요금 정책에 따라 계산됩니다. 요금 정책이 변경될 수 있으니 Anthropic 공식 문서를 확인하세요.
+
+## 라이선스
+
+MIT License
+
+## 기여
+
+버그 신고나 기능 제안은 이슈 트래커를 이용해 주세요. 풀 리퀘스트도 환영합니다.
