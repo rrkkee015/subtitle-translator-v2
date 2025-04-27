@@ -241,6 +241,99 @@ class SubtitleProcessor:
                 new_subtitles.append('\n'.join(lines))
     
         return '\n\n'.join(new_subtitles)
+        
+    def _parse_timestamp(self, timestamp: str) -> float:
+        """
+        시간 문자열(00:00:00,000)을 초 단위 부동소수점으로 변환
+        
+        Args:
+            timestamp: 시간 문자열 (00:00:00,000 형식)
+            
+        Returns:
+            초 단위 시간 (부동소수점)
+        """
+        # 시간 형식: 00:00:00,000
+        hours, minutes, seconds = timestamp.split(':')
+        seconds, milliseconds = seconds.split(',')
+        
+        total_seconds = (int(hours) * 3600) + (int(minutes) * 60) + int(seconds) + (int(milliseconds) / 1000)
+        return total_seconds
+        
+    def _format_timestamp(self, seconds: float) -> str:
+        """
+        초 단위 부동소수점을 시간 문자열(00:00:00,000)로 변환
+        
+        Args:
+            seconds: 초 단위 시간 (부동소수점)
+            
+        Returns:
+            시간 문자열 (00:00:00,000 형식)
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds - int(seconds)) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+        
+    def check_timestamp_overlaps(self, srt: str) -> str:
+        """
+        자막 시간이 중복되는지 확인하고 중복된 경우 조정
+        
+        Args:
+            srt: 검사할 SRT 내용
+            
+        Returns:
+            시간 중복이 해결된, 조정된 SRT 내용
+        """
+        if not srt.strip():
+            return ""
+            
+        subtitles = srt.strip().split('\n\n')
+        adjusted_subtitles = []
+        
+        # 이전 자막의 종료 시간을 추적
+        prev_end_time = 0
+        
+        for subtitle in subtitles:
+            lines = subtitle.strip().split('\n')
+            if len(lines) < 2:  # 최소한 자막 번호와 시간 정보가 필요
+                adjusted_subtitles.append(subtitle)
+                continue
+                
+            # 시간 정보 파싱
+            try:
+                time_line = lines[1]
+                start_time_str, end_time_str = time_line.split(' --> ')
+                
+                start_time = self._parse_timestamp(start_time_str)
+                end_time = self._parse_timestamp(end_time_str)
+                
+                # 시작 시간이 이전 자막 종료 시간보다 빠르면 조정
+                if start_time < prev_end_time:
+                    self.logger.warning(f"시간 중복 감지: 이전 종료 {self._format_timestamp(prev_end_time)}, 현재 시작 {start_time_str}")
+                    # 시작 시간을 이전 자막 종료 시간으로 설정 (50ms 여유)
+                    start_time = prev_end_time + 0.05
+                    
+                    # 종료 시간이 시작 시간보다 빠르면 시작 시간 + 1초로 설정
+                    if end_time <= start_time:
+                        end_time = start_time + 1.0
+                        
+                    # 시간 문자열 업데이트
+                    start_time_str = self._format_timestamp(start_time)
+                    end_time_str = self._format_timestamp(end_time)
+                    lines[1] = f"{start_time_str} --> {end_time_str}"
+                    
+                # 현재 자막의 종료 시간을 다음 자막의 비교를 위해 저장
+                prev_end_time = end_time
+                
+            except (ValueError, IndexError) as e:
+                self.logger.warning(f"자막 시간 파싱 중 오류: {e} - 원본 유지: {subtitle}")
+                
+            # 조정된 자막 추가
+            adjusted_subtitles.append('\n'.join(lines))
+            
+        return '\n\n'.join(adjusted_subtitles)
 
 
 class ClaudeTranslator:
@@ -488,6 +581,18 @@ class SubtitleTranslator:
             
             # 자막 번호 재정렬
             translated_srt = self.processor.renumber_subtitles(translated_srt)
+            
+            # 시간 중복 확인 및 조정
+            self.logger.info("자막 시간 중복 확인 및 조정 중...")
+            original_translated_srt = translated_srt
+            adjusted_translated_srt = self.processor.check_timestamp_overlaps(translated_srt)
+            
+            # 수정된 내용이 있는지 확인
+            if original_translated_srt != adjusted_translated_srt:
+                self.logger.info("시간 중복이 감지되어 자동으로 조정되었습니다.")
+                translated_srt = adjusted_translated_srt
+            else:
+                self.logger.info("시간 중복이 발견되지 않았습니다.")
             
             # 결과 저장
             self.file_handler.write_srt_file(output_file, translated_srt)

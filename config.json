@@ -2,7 +2,7 @@
   "model": "claude-3-7-sonnet-20250219",
   "batch_size": 5,
   "max_tokens": 8000,
-  "max_workers": 3,
+  "max_workers": 5,
   "input_token_cost": 0.000003,
   "output_token_cost": 0.00000375
 }
