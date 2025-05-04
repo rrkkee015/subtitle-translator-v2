@@ -256,6 +256,7 @@ class SubtitleTranslatorApp(QMainWindow):
         self.translator_thread = None
         self.youtube_thread = None
         self.extract_thread = None
+        self.extract_only_thread = None  # 단독 자막 추출용 스레드 추가
         self.downloaded_video = None
         self.extracted_subtitle = None
         
@@ -293,12 +294,17 @@ class SubtitleTranslatorApp(QMainWindow):
         self.tabs.addTab(self.tab_translate, "자막 번역")
         self.setup_translate_tab()
         
-        # 탭 2: YouTube 다운로드
+        # 탭 2: 자막 추출
+        self.tab_extract = QWidget()
+        self.tabs.addTab(self.tab_extract, "자막 추출")
+        self.setup_extract_tab()
+        
+        # 탭 3: YouTube 다운로드
         self.tab_youtube = QWidget()
         self.tabs.addTab(self.tab_youtube, "YouTube 다운로드 및 자막 추출")
         self.setup_youtube_tab()
         
-        # 탭 3: 설정
+        # 탭 4: 설정
         self.tab_settings = QWidget()
         self.tabs.addTab(self.tab_settings, "설정")
         self.setup_settings_tab()
@@ -430,6 +436,11 @@ class SubtitleTranslatorApp(QMainWindow):
         model_layout.addWidget(model_label)
         model_layout.addWidget(self.model_combo)
         
+        # 추가 설명 레이블
+        model_help = QLabel("* claude-3-7-sonnet: 균형 잡힌, claude-3-haiku: 빠른 & 저렴한, claude-3-opus: 최고 품질")
+        model_help.setWordWrap(True)
+        model_layout.addWidget(model_help)
+        
         # 배치 크기 설정
         batch_layout = QHBoxLayout()
         batch_label = QLabel("배치 크기:")
@@ -518,8 +529,8 @@ class SubtitleTranslatorApp(QMainWindow):
         info_layout = QVBoxLayout()
         
         info_text = QLabel(
-            "자막 번역 도구 v1.0\n\n"
-            "이 앱은 영어 SRT 자막을 한국어로 번역하고, YouTube 동영상에서 자막을 추출하는 기능을 제공합니다.\n"
+            "자막 번역 도구 v1.1\n\n"
+            "이 앱은 영어 SRT 자막을 한국어로 번역하고, 비디오 파일 또는 YouTube 동영상에서 자막을 추출하는 기능을 제공합니다.\n"
             "Claude API를 사용하여 고품질 번역을 제공합니다.\n\n"
             "© 2024 All Rights Reserved"
         )
@@ -765,6 +776,126 @@ class SubtitleTranslatorApp(QMainWindow):
                 output_dir = os.path.dirname(os.path.abspath(filename))
                 output_file = os.path.join(output_dir, output_file_name)
                 self.output_file_edit.setText(output_file)
+                
+                # 번역 시작
+                self.start_translation()
+            else:
+                QMessageBox.information(self, "자막 추출 완료", f"자막 추출이 완료되었습니다.\n파일: {filename}")
+        else:
+            QMessageBox.warning(self, "자막 추출 실패", f"자막 추출 중 오류가 발생했습니다:\n{message}")
+            self.statusBar().showMessage("자막 추출 실패")
+            
+    def setup_extract_tab(self):
+        """자막 추출 탭 설정"""
+        layout = QVBoxLayout(self.tab_extract)
+        
+        # 비디오 파일 선택 그룹
+        file_group = QGroupBox("비디오 파일")
+        file_layout = QHBoxLayout()
+        
+        self.video_file_edit = QLineEdit()
+        self.video_file_edit.setPlaceholderText("자막을 추출할 비디오 파일 선택")
+        self.video_file_edit.setReadOnly(True)
+        
+        browse_button = QPushButton("찾아보기")
+        browse_button.clicked.connect(self.browse_video_file)
+        
+        file_layout.addWidget(self.video_file_edit, 4)
+        file_layout.addWidget(browse_button, 1)
+        file_group.setLayout(file_layout)
+        layout.addWidget(file_group)
+        
+        # 추출 설정 그룹
+        options_group = QGroupBox("추출 설정")
+        options_layout = QVBoxLayout()
+        
+        self.option_translate_after_extract = QCheckBox("자막 추출 후 번역하기")
+        self.option_translate_after_extract.setChecked(True)
+        options_layout.addWidget(self.option_translate_after_extract)
+        
+        options_group.setLayout(options_layout)
+        layout.addWidget(options_group)
+        
+        # 추출 버튼
+        extract_button = QPushButton("자막 추출 시작")
+        extract_button.setMinimumHeight(40)
+        extract_button.clicked.connect(self.start_extraction_only)
+        layout.addWidget(extract_button)
+        
+        # 진행 상황 표시
+        progress_group = QGroupBox("진행 상황")
+        progress_layout = QVBoxLayout()
+        
+        self.extract_log_output = QTextEdit()
+        self.extract_log_output.setReadOnly(True)
+        self.extract_log_output.setMinimumHeight(300)
+        progress_layout.addWidget(self.extract_log_output)
+        
+        progress_group.setLayout(progress_layout)
+        layout.addWidget(progress_group)
+        
+    def browse_video_file(self):
+        """비디오 파일 선택 다이얼로그"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "비디오 파일 선택", self.download_directory, 
+            "비디오 파일 (*.mp4 *.mkv *.avi *.mov *.webm);;모든 파일 (*)"
+        )
+        
+        if file_path:
+            self.video_file_edit.setText(file_path)
+            
+    def start_extraction_only(self):
+        """단독 자막 추출 시작"""
+        video_file = self.video_file_edit.text()
+        
+        if not video_file:
+            QMessageBox.warning(self, "경고", "자막을 추출할 비디오 파일을 선택해주세요.")
+            return
+            
+        if not os.path.exists(video_file):
+            QMessageBox.warning(self, "경고", f"파일을 찾을 수 없습니다: {video_file}")
+            return
+            
+        # 로그 출력 초기화
+        self.extract_log_output.clear()
+        
+        # 로그 출력 리다이렉트
+        self.stdout_redirect = RedirectOutput(self.extract_log_output)
+        sys.stdout = self.stdout_redirect
+        sys.stderr = self.stdout_redirect
+        
+        # 자막 추출 스레드 시작
+        self.extract_only_thread = ExtractSubtitleThread(video_file)
+        self.extract_only_thread.update_status.connect(self.update_status)
+        self.extract_only_thread.finished_signal.connect(self.extraction_only_finished)
+        self.extract_only_thread.start()
+        
+        # UI 상태 업데이트
+        self.statusBar().showMessage("자막 추출 중...")
+        
+    def extraction_only_finished(self, success, filename, message):
+        """단독 자막 추출 완료 처리"""
+        # 표준 출력 복원
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        
+        if success:
+            self.statusBar().showMessage("자막 추출 완료")
+            
+            if self.option_translate_after_extract.isChecked():
+                # 번역 탭으로 전환하고 파일 경로 설정
+                self.tabs.setCurrentIndex(0)
+                self.input_file_edit.setText(filename)
+                
+                # 출력 파일 경로 자동 생성
+                base, ext = os.path.splitext(os.path.basename(filename))
+                output_file_name = f"{base}_ko{ext}"
+                output_dir = os.path.dirname(os.path.abspath(filename))
+                output_file = os.path.join(output_dir, output_file_name)
+                self.output_file_edit.setText(output_file)
+                
+                QMessageBox.information(self, "자막 추출 완료", 
+                    f"자막 추출이 완료되었습니다.\n파일: {filename}\n\n번역 탭으로 이동합니다.")
                 
                 # 번역 시작
                 self.start_translation()
