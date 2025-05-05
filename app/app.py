@@ -10,9 +10,9 @@ import json
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QTabWidget, QLabel, QPushButton, QLineEdit, QFileDialog, 
                             QTextEdit, QProgressBar, QComboBox, QSpinBox, QMessageBox,
-                            QGroupBox, QRadioButton, QCheckBox)
+                            QGroupBox, QRadioButton, QCheckBox, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl
-from PyQt6.QtGui import QIcon, QDesktopServices, QFont
+from PyQt6.QtGui import QIcon, QDesktopServices, QFont, QColor
 
 # 상위 디렉토리 추가하여 기존 모듈 import 가능하게 함
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -279,10 +279,133 @@ class SubtitleTranslatorApp(QMainWindow):
         self.setGeometry(100, 100, 900, 700)
         self.setMinimumSize(800, 600)
         
+        # 모던 스타일 설정
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f7;
+            }
+            QWidget {
+                font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+                color: #333333;
+                font-size: 13px;
+            }
+            QTabWidget::pane { 
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                background-color: white;
+                padding: 5px;
+            }
+            QTabBar::tab {
+                background-color: #f0f0f0;
+                color: #666666;
+                border: 1px solid #e0e0e0;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                min-width: 8ex;
+                padding: 8px 16px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: #4a86e8;
+                color: white;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #e6e6e6;
+            }
+            QPushButton {
+                background-color: #4a86e8;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3a76d8;
+            }
+            QPushButton:pressed {
+                background-color: #2a66c8;
+            }
+            QLineEdit, QTextEdit, QComboBox, QSpinBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                background-color: white;
+                min-height: 28px;
+            }
+            QLineEdit:focus, QTextEdit:focus {
+                border: 1px solid #4a86e8;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 16px;
+                background-color: rgba(255, 255, 255, 0.7);
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 12px;
+                padding: 0 5px;
+                color: #4a86e8;
+            }
+            QProgressBar {
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                background-color: white;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #4a86e8;
+                border-radius: 5px;
+            }
+            QCheckBox {
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4a86e8;
+                border: 1px solid #4a86e8;
+            }
+            QComboBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: right center;
+                width: 20px;
+                border-left: none;
+            }
+            QSpinBox {
+                padding-right: 15px;
+            }
+            QTextEdit {
+                background-color: #f8f8f8;
+                color: #444;
+                border-radius: 6px;
+                font-family: 'Menlo', 'Consolas', monospace;
+                font-size: 13px;
+            }
+        """)
+        
         # 메인 위젯과 레이아웃
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(20, 15, 20, 20)
+        main_layout.setSpacing(12)
         
         # 탭 위젯 생성
         self.tabs = QTabWidget()
@@ -311,6 +434,14 @@ class SubtitleTranslatorApp(QMainWindow):
         
         # 하단 상태 바
         self.statusBar().showMessage("준비됨")
+        self.statusBar().setStyleSheet("""
+            QStatusBar {
+                background-color: #4a86e8;
+                color: white;
+                padding: 5px;
+                font-weight: bold;
+            }
+        """)
         
         # 앱 아이콘 설정
         # self.setWindowIcon(QIcon("app/icon.png"))
@@ -318,16 +449,21 @@ class SubtitleTranslatorApp(QMainWindow):
     def setup_translate_tab(self):
         """자막 번역 탭 설정"""
         layout = QVBoxLayout(self.tab_translate)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
         
         # 파일 선택 그룹
         file_group = QGroupBox("입력 파일")
         file_layout = QHBoxLayout()
+        file_layout.setContentsMargins(12, 20, 12, 12)
+        file_layout.setSpacing(8)
         
         self.input_file_edit = QLineEdit()
         self.input_file_edit.setPlaceholderText("번역할 SRT 파일 선택")
         self.input_file_edit.setReadOnly(True)
         
         browse_button = QPushButton("찾아보기")
+        browse_button.setIcon(QIcon.fromTheme("document-open"))
         browse_button.clicked.connect(self.browse_input_file)
         
         file_layout.addWidget(self.input_file_edit, 4)
@@ -338,12 +474,15 @@ class SubtitleTranslatorApp(QMainWindow):
         # 출력 파일 그룹
         output_group = QGroupBox("출력 파일")
         output_layout = QHBoxLayout()
+        output_layout.setContentsMargins(12, 20, 12, 12)
+        output_layout.setSpacing(8)
         
         self.output_file_edit = QLineEdit()
         self.output_file_edit.setPlaceholderText("출력 SRT 파일 경로 (자동 생성)")
         self.output_file_edit.setReadOnly(True)
         
         output_browse_button = QPushButton("찾아보기")
+        output_browse_button.setIcon(QIcon.fromTheme("document-save"))
         output_browse_button.clicked.connect(self.browse_output_file)
         
         output_layout.addWidget(self.output_file_edit, 4)
@@ -353,20 +492,37 @@ class SubtitleTranslatorApp(QMainWindow):
         
         # 번역 버튼
         translate_button = QPushButton("번역 시작")
-        translate_button.setMinimumHeight(40)
+        translate_button.setMinimumHeight(48)
+        translate_button.setIcon(QIcon.fromTheme("media-playback-start"))
         translate_button.clicked.connect(self.start_translation)
         layout.addWidget(translate_button)
         
         # 진행 상황 표시
         progress_group = QGroupBox("진행 상황")
         progress_layout = QVBoxLayout()
+        progress_layout.setContentsMargins(12, 20, 12, 12)
+        progress_layout.setSpacing(10)
         
         self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p% 완료")
+        self.progress_bar.setMinimumHeight(25)
         progress_layout.addWidget(self.progress_bar)
         
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setMinimumHeight(250)
+        self.log_output.setStyleSheet("""
+            QTextEdit {
+                background-color: #f0f0f0;
+                color: #333;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Menlo', 'Consolas', monospace;
+                font-size: 13px;
+            }
+        """)
         progress_layout.addWidget(self.log_output)
         
         progress_group.setLayout(progress_layout)
@@ -375,15 +531,20 @@ class SubtitleTranslatorApp(QMainWindow):
     def setup_youtube_tab(self):
         """YouTube 다운로드 탭 설정"""
         layout = QVBoxLayout(self.tab_youtube)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
         
         # URL 입력 그룹
         url_group = QGroupBox("YouTube URL")
         url_layout = QHBoxLayout()
+        url_layout.setContentsMargins(12, 20, 12, 12)
+        url_layout.setSpacing(8)
         
         self.youtube_url_edit = QLineEdit()
         self.youtube_url_edit.setPlaceholderText("YouTube 동영상 URL을 입력하세요")
         
         download_button = QPushButton("다운로드")
+        download_button.setIcon(QIcon.fromTheme("go-down"))
         download_button.clicked.connect(self.start_youtube_download)
         
         url_layout.addWidget(self.youtube_url_edit, 4)
@@ -394,6 +555,8 @@ class SubtitleTranslatorApp(QMainWindow):
         # 작업 설정 그룹
         options_group = QGroupBox("다운로드 후 작업")
         options_layout = QVBoxLayout()
+        options_layout.setContentsMargins(15, 20, 15, 15)
+        options_layout.setSpacing(10)
         
         self.option_extract = QCheckBox("자막 추출")
         self.option_extract.setChecked(True)
@@ -409,10 +572,23 @@ class SubtitleTranslatorApp(QMainWindow):
         # 진행 상황 그룹
         yt_progress_group = QGroupBox("진행 상황")
         yt_progress_layout = QVBoxLayout()
+        yt_progress_layout.setContentsMargins(12, 20, 12, 12)
+        yt_progress_layout.setSpacing(10)
         
         self.yt_log_output = QTextEdit()
         self.yt_log_output.setReadOnly(True)
         self.yt_log_output.setMinimumHeight(300)
+        self.yt_log_output.setStyleSheet("""
+            QTextEdit {
+                background-color: #f0f0f0;
+                color: #333;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Menlo', 'Consolas', monospace;
+                font-size: 13px;
+            }
+        """)
         yt_progress_layout.addWidget(self.yt_log_output)
         
         yt_progress_group.setLayout(yt_progress_layout)
@@ -420,45 +596,93 @@ class SubtitleTranslatorApp(QMainWindow):
         
     def setup_settings_tab(self):
         """설정 탭 설정"""
-        layout = QVBoxLayout(self.tab_settings)
+        # 스크롤 영역 생성
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        # 스크롤 영역에 들어갈 컨테이너 위젯
+        settings_container = QWidget()
+        
+        # 컨테이너 위젯의 레이아웃
+        layout = QVBoxLayout(settings_container)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        # 스크롤 영역에 컨테이너 위젯 설정
+        scroll_area.setWidget(settings_container)
+        
+        # 탭에 스크롤 영역 추가
+        tab_layout = QVBoxLayout(self.tab_settings)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.addWidget(scroll_area)
         
         # 모델 설정 그룹
         model_group = QGroupBox("번역 모델 설정")
         model_layout = QVBoxLayout()
+        model_layout.setContentsMargins(15, 20, 15, 15)
+        model_layout.setSpacing(10)
         
         model_label = QLabel("Claude 모델:")
+        model_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         self.model_combo = QComboBox()
         self.model_combo.addItems([
             "claude-3-7-sonnet-20250219",
             "claude-3-haiku-20240307",
             "claude-3-opus-20240229"
         ])
+        self.model_combo.setMinimumHeight(36)
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+        """)
         model_layout.addWidget(model_label)
         model_layout.addWidget(self.model_combo)
         
         # 추가 설명 레이블
         model_help = QLabel("* claude-3-7-sonnet: 균형 잡힌, claude-3-haiku: 빠른 & 저렴한, claude-3-opus: 최고 품질")
+        model_help.setStyleSheet("color: #666666; font-style: italic; font-size: 13px;")
         model_help.setWordWrap(True)
+        model_help.setMinimumHeight(30)
         model_layout.addWidget(model_help)
         
         # 배치 크기 설정
         batch_layout = QHBoxLayout()
+        batch_layout.setSpacing(10)
         batch_label = QLabel("배치 크기:")
+        batch_label.setStyleSheet("font-weight: bold;")
         self.batch_spin = QSpinBox()
         self.batch_spin.setMinimum(1)
         self.batch_spin.setMaximum(20)
         self.batch_spin.setValue(5)
+        self.batch_spin.setStyleSheet("""
+            QSpinBox {
+                padding: 6px;
+                border-radius: 6px;
+            }
+        """)
         batch_layout.addWidget(batch_label)
         batch_layout.addWidget(self.batch_spin)
         model_layout.addLayout(batch_layout)
         
         # 병렬 작업자 수 설정
         workers_layout = QHBoxLayout()
+        workers_layout.setSpacing(10)
         workers_label = QLabel("병렬 작업자 수:")
+        workers_label.setStyleSheet("font-weight: bold;")
         self.workers_spin = QSpinBox()
         self.workers_spin.setMinimum(1)
         self.workers_spin.setMaximum(10)
         self.workers_spin.setValue(3)
+        self.workers_spin.setStyleSheet("""
+            QSpinBox {
+                padding: 6px;
+                border-radius: 6px;
+            }
+        """)
         workers_layout.addWidget(workers_label)
         workers_layout.addWidget(self.workers_spin)
         model_layout.addLayout(workers_layout)
@@ -469,15 +693,20 @@ class SubtitleTranslatorApp(QMainWindow):
         # 디렉토리 설정 그룹
         dir_group = QGroupBox("파일 저장 위치 설정")
         dir_layout = QVBoxLayout()
+        dir_layout.setContentsMargins(15, 20, 15, 15)
+        dir_layout.setSpacing(10)
         
         # 다운로드 디렉토리 설정
         download_dir_layout = QHBoxLayout()
+        download_dir_layout.setSpacing(10)
         download_dir_label = QLabel("기본 저장 위치:")
+        download_dir_label.setStyleSheet("font-weight: bold;")
         self.download_dir_edit = QLineEdit()
         self.download_dir_edit.setText(self.download_directory)
         self.download_dir_edit.setReadOnly(True)
         
         download_dir_button = QPushButton("변경")
+        download_dir_button.setIcon(QIcon.fromTheme("folder"))
         download_dir_button.clicked.connect(self.browse_download_directory)
         
         download_dir_layout.addWidget(download_dir_label)
@@ -486,6 +715,7 @@ class SubtitleTranslatorApp(QMainWindow):
         dir_layout.addLayout(download_dir_layout)
         
         dir_note = QLabel("* 이 설정은 유튜브 동영상 다운로드와 자막 파일의 기본 저장 위치로 사용됩니다.")
+        dir_note.setStyleSheet("color: #666666; font-style: italic;")
         dir_layout.addWidget(dir_note)
         
         dir_group.setLayout(dir_layout)
@@ -494,26 +724,35 @@ class SubtitleTranslatorApp(QMainWindow):
         # API 키 설정 그룹
         api_group = QGroupBox("API 키 설정")
         api_layout = QVBoxLayout()
+        api_layout.setContentsMargins(15, 20, 15, 15)
+        api_layout.setSpacing(10)
         
         anthropic_layout = QHBoxLayout()
+        anthropic_layout.setSpacing(10)
         anthropic_label = QLabel("Anthropic API 키:")
+        anthropic_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         self.anthropic_key_edit = QLineEdit()
         self.anthropic_key_edit.setPlaceholderText("ANTHROPIC_API_KEY 환경 변수 사용 중")
         self.anthropic_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.anthropic_key_edit.setMinimumHeight(40)
         anthropic_layout.addWidget(anthropic_label)
         anthropic_layout.addWidget(self.anthropic_key_edit)
         api_layout.addLayout(anthropic_layout)
         
         assembly_layout = QHBoxLayout()
+        assembly_layout.setSpacing(10)
         assembly_label = QLabel("AssemblyAI API 키:")
+        assembly_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         self.assembly_key_edit = QLineEdit()
         self.assembly_key_edit.setPlaceholderText("ASSEMBLYAI_API_KEY 환경 변수 사용 중")
         self.assembly_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.assembly_key_edit.setMinimumHeight(40)
         assembly_layout.addWidget(assembly_label)
         assembly_layout.addWidget(self.assembly_key_edit)
         api_layout.addLayout(assembly_layout)
         
         api_note = QLabel("* API 키는 애플리케이션이 실행되는 동안만 유효합니다. 앱 종료 시 저장되지 않습니다.")
+        api_note.setStyleSheet("color: #666666; font-style: italic;")
         api_layout.addWidget(api_note)
         
         api_group.setLayout(api_layout)
@@ -521,12 +760,16 @@ class SubtitleTranslatorApp(QMainWindow):
         
         # 저장 버튼
         save_button = QPushButton("설정 저장")
+        save_button.setMinimumHeight(40)
+        save_button.setIcon(QIcon.fromTheme("document-save"))
         save_button.clicked.connect(self.save_settings)
         layout.addWidget(save_button)
         
         # 정보 그룹
         info_group = QGroupBox("앱 정보")
         info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(15, 20, 15, 15)
+        info_layout.setSpacing(10)
         
         info_text = QLabel(
             "자막 번역 도구 v1.1\n\n"
@@ -536,13 +779,21 @@ class SubtitleTranslatorApp(QMainWindow):
         )
         info_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_text.setWordWrap(True)
+        info_text.setStyleSheet("""
+            QLabel {
+                padding: 15px;
+                background-color: #f0f0f0;
+                border-radius: 8px;
+                color: #555;
+            }
+        """)
         info_layout.addWidget(info_text)
         
         info_group.setLayout(info_layout)
         layout.addWidget(info_group)
         
         # 빈 공간 추가
-        layout.addStretch()
+        layout.addStretch(1)
     
     def load_config(self):
         """설정 로드"""
@@ -788,16 +1039,21 @@ class SubtitleTranslatorApp(QMainWindow):
     def setup_extract_tab(self):
         """자막 추출 탭 설정"""
         layout = QVBoxLayout(self.tab_extract)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
         
         # 비디오 파일 선택 그룹
         file_group = QGroupBox("비디오 파일")
         file_layout = QHBoxLayout()
+        file_layout.setContentsMargins(12, 20, 12, 12)
+        file_layout.setSpacing(8)
         
         self.video_file_edit = QLineEdit()
         self.video_file_edit.setPlaceholderText("자막을 추출할 비디오 파일 선택")
         self.video_file_edit.setReadOnly(True)
         
         browse_button = QPushButton("찾아보기")
+        browse_button.setIcon(QIcon.fromTheme("video-x-generic"))
         browse_button.clicked.connect(self.browse_video_file)
         
         file_layout.addWidget(self.video_file_edit, 4)
@@ -808,6 +1064,8 @@ class SubtitleTranslatorApp(QMainWindow):
         # 추출 설정 그룹
         options_group = QGroupBox("자막 추출 후 작업")
         options_layout = QVBoxLayout()
+        options_layout.setContentsMargins(15, 20, 15, 15)
+        options_layout.setSpacing(10)
         
         self.option_translate_after_extract = QCheckBox("자막 추출 후 번역하기")
         self.option_translate_after_extract.setChecked(True)
@@ -818,17 +1076,31 @@ class SubtitleTranslatorApp(QMainWindow):
         
         # 추출 버튼
         extract_button = QPushButton("자막 추출 시작")
-        extract_button.setMinimumHeight(40)
+        extract_button.setMinimumHeight(48)
+        extract_button.setIcon(QIcon.fromTheme("media-playback-start"))
         extract_button.clicked.connect(self.start_extraction_only)
         layout.addWidget(extract_button)
         
         # 진행 상황 표시
         progress_group = QGroupBox("진행 상황")
         progress_layout = QVBoxLayout()
+        progress_layout.setContentsMargins(12, 20, 12, 12)
+        progress_layout.setSpacing(10)
         
         self.extract_log_output = QTextEdit()
         self.extract_log_output.setReadOnly(True)
         self.extract_log_output.setMinimumHeight(300)
+        self.extract_log_output.setStyleSheet("""
+            QTextEdit {
+                background-color: #f0f0f0;
+                color: #333;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Menlo', 'Consolas', monospace;
+                font-size: 13px;
+            }
+        """)
         progress_layout.addWidget(self.extract_log_output)
         
         progress_group.setLayout(progress_layout)
@@ -911,6 +1183,10 @@ def main():
     
     # 앱 스타일 설정
     app.setStyle("Fusion")
+    
+    # 폰트 설정
+    font = QFont("Pretendard, Apple SD Gothic Neo, Malgun Gothic", 11)
+    app.setFont(font)
     
     window = SubtitleTranslatorApp()
     window.show()
