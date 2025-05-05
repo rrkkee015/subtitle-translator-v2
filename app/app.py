@@ -288,21 +288,21 @@ class SubtitleTranslatorApp(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.TabPosition.North)
         main_layout.addWidget(self.tabs)
-        
-        # 탭 1: 자막 번역
-        self.tab_translate = QWidget()
-        self.tabs.addTab(self.tab_translate, "자막 번역")
-        self.setup_translate_tab()
-        
+
+        # 탭 1: YouTube 다운로드
+        self.tab_youtube = QWidget()
+        self.tabs.addTab(self.tab_youtube, "YouTube 다운로드")
+        self.setup_youtube_tab()
+
         # 탭 2: 자막 추출
         self.tab_extract = QWidget()
         self.tabs.addTab(self.tab_extract, "자막 추출")
         self.setup_extract_tab()
-        
-        # 탭 3: YouTube 다운로드
-        self.tab_youtube = QWidget()
-        self.tabs.addTab(self.tab_youtube, "YouTube 다운로드 및 자막 추출")
-        self.setup_youtube_tab()
+
+        # 탭 3: 자막 번역
+        self.tab_translate = QWidget()
+        self.tabs.addTab(self.tab_translate, "자막 번역")
+        self.setup_translate_tab()
         
         # 탭 4: 설정
         self.tab_settings = QWidget()
@@ -392,7 +392,7 @@ class SubtitleTranslatorApp(QMainWindow):
         layout.addWidget(url_group)
         
         # 작업 설정 그룹
-        options_group = QGroupBox("작업 설정")
+        options_group = QGroupBox("다운로드 후 작업")
         options_layout = QVBoxLayout()
         
         self.option_extract = QCheckBox("자막 추출")
@@ -532,7 +532,7 @@ class SubtitleTranslatorApp(QMainWindow):
             "자막 번역 도구 v1.1\n\n"
             "이 앱은 영어 SRT 자막을 한국어로 번역하고, 비디오 파일 또는 YouTube 동영상에서 자막을 추출하는 기능을 제공합니다.\n"
             "Claude API를 사용하여 고품질 번역을 제공합니다.\n\n"
-            "© 2024 All Rights Reserved"
+            "revfactory © 2024 All Rights Reserved"
         )
         info_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_text.setWordWrap(True)
@@ -806,7 +806,7 @@ class SubtitleTranslatorApp(QMainWindow):
         layout.addWidget(file_group)
         
         # 추출 설정 그룹
-        options_group = QGroupBox("추출 설정")
+        options_group = QGroupBox("자막 추출 후 작업")
         options_layout = QVBoxLayout()
         
         self.option_translate_after_extract = QCheckBox("자막 추출 후 번역하기")
