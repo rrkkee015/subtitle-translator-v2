@@ -15,13 +15,9 @@
 
 
 ## 스크린샷
-<img width="895" alt="스크린샷 2025-05-05 13 51 26" src="https://github.com/user-attachments/assets/bf44a2b1-ba97-4a06-8d04-86cb5bf1e877" />
+<img width="600" alt="스크린샷 2025-05-05 14 15 16" src="https://github.com/user-attachments/assets/a13af3ac-3197-4ea4-80af-3768a6c2220a" />
+<img width="600" alt="스크린샷 2025-05-05 14 15 07" src="https://github.com/user-attachments/assets/b9fdd7be-ee6c-4b9f-b9f1-92eb37258bd0" />
 
-<img width="896" alt="스크린샷 2025-05-05 13 51 38" src="https://github.com/user-attachments/assets/c90d79d5-a008-41f9-b14e-6801cd216be2" />
-
-<img width="897" alt="스크린샷 2025-05-05 13 51 48" src="https://github.com/user-attachments/assets/1e797d92-e8bb-48ff-8c03-4cdc1c3d590b" />
-
-<img width="896" alt="스크린샷 2025-05-05 13 51 57" src="https://github.com/user-attachments/assets/b8dc2522-dde8-4508-9603-a4b0cc42b6b1" />
 
 ## 요구 사항
 
