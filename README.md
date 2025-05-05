@@ -1,4 +1,4 @@
-# SRT 자막 번역 및 추출 도구
+# YouTube 자막 번역기 v2
 
 이 도구는 영어 SRT 자막 파일을 한국어로 번역하며, YouTube 동영상에서 자동으로 자막을 추출하는 기능을 제공합니다. Claude API를 사용하여 자연스러운 번역을 제공합니다.
 
@@ -12,6 +12,12 @@
 - 자막 시간 중복 자동 감지 및 조정
 - 번역 비용 계산 및 통계 제공
 - 설정 파일을 통한 쉬운 커스터마이징
+
+
+## 스크린샷
+<img width="600" alt="스크린샷 2025-05-05 14 15 16" src="https://github.com/user-attachments/assets/a13af3ac-3197-4ea4-80af-3768a6c2220a" />
+<img width="600" alt="스크린샷 2025-05-05 14 15 07" src="https://github.com/user-attachments/assets/b9fdd7be-ee6c-4b9f-b9f1-92eb37258bd0" />
+
 
 ## 요구 사항
 
