@@ -119,6 +119,7 @@ class TranslationThread(QThread):
 class YoutubeDownloadThread(QThread):
     """YouTube 동영상 다운로드 스레드"""
     update_status = pyqtSignal(str)
+    update_progress = pyqtSignal(float)  # 진행 상황을 위한 시그널 추가 (0~100 범위)
     finished_signal = pyqtSignal(bool, str, str)
 
     def __init__(self, youtube_url, download_directory=None):
@@ -134,28 +135,46 @@ class YoutubeDownloadThread(QThread):
             current_dir = os.getcwd()
             os.chdir(self.download_directory)
             
-            # yt-dlp 명령어 실행
-            result = subprocess.run(
-                ["yt-dlp", "-f", "bestvideo+bestaudio/best", self.youtube_url], 
-                capture_output=True, 
-                text=True
+            # yt-dlp 실시간 출력 처리를 위한 Popen 사용
+            process = subprocess.Popen(
+                ["yt-dlp", "-f", "bestvideo+bestaudio/best", "--newline", self.youtube_url], 
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
             )
             
-            if result.returncode != 0:
-                self.update_status.emit(f"다운로드 실패: {result.stderr}")
-                self.finished_signal.emit(False, "", "다운로드 실패")
-                return
-            
-            # 출력에서 파일명 추출
-            output_lines = result.stderr.split('\n') if result.stderr else result.stdout.split('\n')
             filename = None
             
-            for line in output_lines:
+            # 출력을 실시간으로 처리
+            for line in iter(process.stdout.readline, ''):
+                # 로그 출력
+                self.update_status.emit(line.strip())
+                
+                # 진행률 추출 (다운로드 중)
+                if '[download]' in line and '%' in line:
+                    try:
+                        # "[download]  50.0% of ~20.00MiB at  5.00MiB/s ETA 00:10" 같은 형식에서 백분율 추출
+                        percent_str = line.split('[download]')[1].strip().split('%')[0].strip()
+                        percent = float(percent_str)
+                        self.update_progress.emit(percent)
+                    except (ValueError, IndexError):
+                        pass
+                
+                # 파일명 추출
                 if "Merging formats into" in line:
                     match = re.search(r'Merging formats into "(.*?)"', line)
                     if match:
                         filename = match.group(1)
-                        break
+            
+            # 프로세스 완료 대기
+            return_code = process.wait()
+            
+            if return_code != 0:
+                self.update_status.emit("다운로드 실패")
+                self.finished_signal.emit(False, "", "다운로드 실패")
+                return
             
             if not filename:
                 self.update_status.emit("다운로드된 파일명을 찾을 수 없습니다.")
@@ -177,6 +196,8 @@ class YoutubeDownloadThread(QThread):
             # 절대 경로 생성 (작업 디렉토리를 복원하기 전에)
             full_path = os.path.abspath(filename)
             
+            # 100% 진행률 표시
+            self.update_progress.emit(100.0)
             self.update_status.emit(f"동영상 다운로드 완료: {filename}")
             self.finished_signal.emit(True, full_path, "다운로드 완료")
             
@@ -272,6 +293,10 @@ class SubtitleTranslatorApp(QMainWindow):
         # UI 초기화 및 설정 로드
         self.init_ui()
         self.config = self.load_config()
+        
+        # 프로그레스 바 초기화
+        self.progress_bar.setValue(0)
+        self.yt_progress_bar.setValue(0)
         
         # 설정 파일에서 저장 위치 로드
         self.load_directories_from_config()
@@ -580,6 +605,13 @@ class SubtitleTranslatorApp(QMainWindow):
         yt_progress_layout = QVBoxLayout()
         yt_progress_layout.setContentsMargins(12, 20, 12, 12)
         yt_progress_layout.setSpacing(10)
+        
+        # 프로그레스 바 추가
+        self.yt_progress_bar = QProgressBar()
+        self.yt_progress_bar.setTextVisible(True)
+        self.yt_progress_bar.setFormat("%p% 완료")
+        self.yt_progress_bar.setMinimumHeight(25)
+        yt_progress_layout.addWidget(self.yt_progress_bar)
         
         self.yt_log_output = QTextEdit()
         self.yt_log_output.setReadOnly(True)
@@ -942,9 +974,13 @@ class SubtitleTranslatorApp(QMainWindow):
         self.statusBar().showMessage("번역 진행 중...")
     
     def update_progress(self, current, total):
-        """진행 상황 업데이트"""
+        """번역 진행 상황 업데이트"""
         progress = int((current / total) * 100)
         self.progress_bar.setValue(progress)
+    
+    def update_youtube_progress(self, percent):
+        """YouTube 다운로드 진행 상황 업데이트"""
+        self.yt_progress_bar.setValue(int(percent))
     
     def update_status(self, message):
         """상태 메시지 업데이트"""
@@ -978,6 +1014,9 @@ class SubtitleTranslatorApp(QMainWindow):
         # 로그 출력 초기화
         self.yt_log_output.clear()
         
+        # 진행 바 초기화
+        self.yt_progress_bar.setValue(0)
+        
         # 로그 출력 리다이렉트
         self.stdout_redirect = RedirectOutput(self.yt_log_output)
         sys.stdout = self.stdout_redirect
@@ -986,6 +1025,7 @@ class SubtitleTranslatorApp(QMainWindow):
         # 다운로드 스레드 시작
         self.youtube_thread = YoutubeDownloadThread(youtube_url, self.download_directory)
         self.youtube_thread.update_status.connect(self.update_status)
+        self.youtube_thread.update_progress.connect(self.update_youtube_progress)
         self.youtube_thread.finished_signal.connect(self.youtube_download_finished)
         self.youtube_thread.start()
         
@@ -996,6 +1036,7 @@ class SubtitleTranslatorApp(QMainWindow):
         """YouTube 다운로드 완료 처리"""
         if success:
             self.statusBar().showMessage("다운로드 완료")
+            self.yt_progress_bar.setValue(100)  # 진행률 100%로 설정
             self.downloaded_video = filename
             
             if self.option_extract.isChecked():
@@ -1005,6 +1046,7 @@ class SubtitleTranslatorApp(QMainWindow):
         else:
             QMessageBox.warning(self, "다운로드 실패", f"YouTube 동영상 다운로드 중 오류가 발생했습니다:\n{message}")
             self.statusBar().showMessage("다운로드 실패")
+            self.yt_progress_bar.setValue(0)  # 진행률 초기화
     
     def start_subtitle_extraction(self, video_filename):
         """자막 추출 시작"""
