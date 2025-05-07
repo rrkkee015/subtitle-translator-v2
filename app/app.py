@@ -174,8 +174,11 @@ class YoutubeDownloadThread(QThread):
                 except Exception as e:
                     self.update_status.emit(f"파일명 변경 실패: {e}")
             
+            # 절대 경로 생성 (작업 디렉토리를 복원하기 전에)
+            full_path = os.path.abspath(filename)
+            
             self.update_status.emit(f"동영상 다운로드 완료: {filename}")
-            self.finished_signal.emit(True, filename, "다운로드 완료")
+            self.finished_signal.emit(True, full_path, "다운로드 완료")
             
         except Exception as e:
             self.update_status.emit(f"다운로드 중 오류 발생: {str(e)}")
@@ -238,8 +241,11 @@ class ExtractSubtitleThread(QThread):
                 self.finished_signal.emit(False, "", f"SRT 파일명 변경 실패: {e}")
                 return
             
+            # 절대 경로로 변환
+            full_srt_path = os.path.abspath(new_srt_filename)
+            
             self.update_status.emit(f"자막 추출 완료: {new_srt_filename}")
-            self.finished_signal.emit(True, new_srt_filename, "자막 추출 완료")
+            self.finished_signal.emit(True, full_srt_path, "자막 추출 완료")
             
         except Exception as e:
             self.update_status.emit(f"자막 추출 중 오류 발생: {str(e)}")
