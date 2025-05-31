@@ -73,7 +73,7 @@ pip install yt-dlp
 
    ```json
    {
-     "model": "claude-3-7-sonnet-20250219",
+     "model": "claude-sonnet-4-20250514",
      "batch_size": 5,
      "max_tokens": 8000,
      "max_workers": 3,

@@ -16,7 +16,7 @@ from tqdm import tqdm
 class SubtitleTranslationConfig:
     """자막 번역 관련 설정을 관리하는 클래스"""
     
-    DEFAULT_MODEL = "claude-3-7-sonnet-20250219"
+    DEFAULT_MODEL = "claude-sonnet-4-20250514"
     DEFAULT_BATCH_SIZE = 5
     DEFAULT_MAX_TOKENS = 8000
     DEFAULT_MAX_WORKERS = 3
