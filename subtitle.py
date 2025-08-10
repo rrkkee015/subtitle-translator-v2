@@ -8,15 +8,19 @@ import json
 import argparse
 import logging
 import anthropic
+import openai
 from typing import List, Dict, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class SubtitleTranslationConfig:
     """자막 번역 관련 설정을 관리하는 클래스"""
     
     DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_PROVIDER = "claude"
     DEFAULT_BATCH_SIZE = 5
     DEFAULT_MAX_TOKENS = 8000
     DEFAULT_MAX_WORKERS = 3
@@ -25,9 +29,12 @@ class SubtitleTranslationConfig:
     def __init__(self, config_file: Optional[str] = None):
         # 기본 설정값
         self.model = self.DEFAULT_MODEL
+        self.provider = self.DEFAULT_PROVIDER
         self.batch_size = self.DEFAULT_BATCH_SIZE
         self.max_tokens = self.DEFAULT_MAX_TOKENS
         self.max_workers = self.DEFAULT_MAX_WORKERS
+        
+        # 기본 비용 설정 (Claude)
         self.input_token_cost = 3 / 1_000_000  # 1M 토큰당 $3
         self.output_token_cost = 3.75 / 1_000_000  # 1M 토큰당 $3.75
         
@@ -48,7 +55,8 @@ class SubtitleTranslationConfig:
         parser = argparse.ArgumentParser(description="SRT 자막 번역 도구")
         parser.add_argument("input_file", help="번역할 SRT 파일 경로")
         parser.add_argument("-o", "--output", help="번역된 SRT 파일의 출력 경로")
-        parser.add_argument("-m", "--model", help=f"사용할 Claude 모델 (기본값: {self.DEFAULT_MODEL})")
+        parser.add_argument("-p", "--provider", choices=["claude", "openai"], help=f"사용할 AI 제공업체 (기본값: {self.DEFAULT_PROVIDER})")
+        parser.add_argument("-m", "--model", help=f"사용할 모델 (기본값: {self.DEFAULT_MODEL})")
         parser.add_argument("-b", "--batch-size", type=int, help=f"자막 배치 크기 (기본값: {self.DEFAULT_BATCH_SIZE})")
         parser.add_argument("-w", "--workers", type=int, help=f"병렬 작업자 수 (기본값: {self.DEFAULT_MAX_WORKERS})")
         parser.add_argument("-c", "--config", help=f"설정 파일 경로 (기본값: {self.DEFAULT_CONFIG_FILE})")
@@ -62,6 +70,7 @@ class SubtitleTranslationConfig:
                 config = json.load(f)
                 
             # 설정 파일에서 값 가져오기
+            self.provider = config.get('provider', self.provider)
             self.model = config.get('model', self.model)
             self.batch_size = config.get('batch_size', self.batch_size)
             self.max_tokens = config.get('max_tokens', self.max_tokens)
@@ -69,8 +78,26 @@ class SubtitleTranslationConfig:
             self.input_token_cost = config.get('input_token_cost', self.input_token_cost)
             self.output_token_cost = config.get('output_token_cost', self.output_token_cost)
             
+            # provider에 따른 기본 모델 설정
+            self._update_model_defaults()
+            
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"설정 파일 로드 중 오류: {e}")
+    
+    def _update_model_defaults(self) -> None:
+        """제공업체에 따른 기본 모델 및 비용 설정 업데이트"""
+        if self.provider == "openai":
+            if self.model == self.DEFAULT_MODEL:  # 기본 Claude 모델인 경우
+                self.model = "gpt-4o"
+            # OpenAI 가격 설정 (GPT-4o 기준)
+            self.input_token_cost = 2.5 / 1_000_000  # 1M 토큰당 $2.5
+            self.output_token_cost = 10 / 1_000_000  # 1M 토큰당 $10
+        elif self.provider == "claude":
+            if "gpt" in self.model.lower():  # OpenAI 모델인 경우
+                self.model = self.DEFAULT_MODEL
+            # Claude 가격 설정
+            self.input_token_cost = 3 / 1_000_000  # 1M 토큰당 $3
+            self.output_token_cost = 3.75 / 1_000_000  # 1M 토큰당 $3.75
     
     def parse_args(self) -> argparse.Namespace:
         """명령줄 인자 파싱 및 설정 업데이트"""
@@ -81,6 +108,9 @@ class SubtitleTranslationConfig:
             self._load_config_from_file(args.config)
         
         # 명령줄 인자로 설정 업데이트
+        if args.provider:
+            self.provider = args.provider
+            self._update_model_defaults()  # provider 변경 시 기본값 업데이트
         if args.model:
             self.model = args.model
         if args.batch_size:
@@ -336,15 +366,61 @@ class SubtitleProcessor:
         return '\n\n'.join(adjusted_subtitles)
 
 
-class ClaudeTranslator:
-    """Claude API를 이용한 번역 처리 클래스"""
+class BaseTranslator:
+    """번역기 기본 클래스"""
     
     def __init__(self, config: SubtitleTranslationConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.system_prompt = self._load_system_prompt()
+    
+    def _load_system_prompt(self) -> str:
+        """번역용 시스템 프롬프트 로드"""
+        return """You are an expert Korean subtitle translator.
+
+Translate English SRT subtitles into natural, complete Korean, preserving meaning and tone.
+
+Strict requirements:
+- Do NOT omit meaning or truncate endings. Each line must be a grammatically complete sentence or phrase appropriate for subtitles.
+- Preserve original SRT numbering and timestamps. Do not add, remove, split, or merge subtitle blocks.
+- Keep line length readable, but prioritize meaning and completeness over strict character limits.
+- Use consistent, natural Korean (standard polite style unless context clearly demands otherwise).
+- Keep proper punctuation. Do not drop endings like "…이다/합니다/예요" if they are needed for a complete sentence.
+
+Output format:
+- Return ONLY the SRT content between the tags below.
+
+<korean_subtitles>
+[SRT content: same numbering and timestamps as input, with Korean lines]
+</korean_subtitles>
+"""
+    
+    def translate_batch(self, batch: str, start_number: int) -> Tuple[str, int, int]:
+        """배치 번역 (하위 클래스에서 구현)"""
+        raise NotImplementedError("하위 클래스에서 구현해야 합니다")
+
+    def _extract_korean_subtitles(self, text: str) -> str:
+        """
+        번역된 텍스트에서 <korean_subtitles> 블록을 추출합니다.
+        태그가 없으면 전체 응답을 그대로 반환합니다.
+        """
+        try:
+            start_token = '<korean_subtitles>'
+            end_token = '</korean_subtitles>'
+            content = text.split(start_token, 1)[1].split(end_token, 1)[0].strip()
+            return content + '\n\n'
+        except Exception:
+            self.logger.warning("번역된 텍스트에서 <korean_subtitles> 태그를 찾을 수 없습니다. 전체 응답을 반환합니다.")
+            return text + '\n\n'
+
+
+class ClaudeTranslator(BaseTranslator):
+    """Claude API를 이용한 번역 처리 클래스"""
+    
+    def __init__(self, config: SubtitleTranslationConfig):
+        super().__init__(config)
         self.api_key = self._get_api_key()
         self.client = anthropic.Anthropic(api_key=self.api_key)
-        self.system_prompt = self._load_system_prompt()
     
     def _get_api_key(self) -> str:
         """
@@ -362,62 +438,6 @@ class ClaudeTranslator:
             raise ValueError("환경 변수 'ANTHROPIC_API_KEY'가 설정되지 않았습니다. "
                             "export ANTHROPIC_API_KEY=your_api_key 명령으로 API 키를 설정해주세요.")
         return api_key
-    
-    def _load_system_prompt(self) -> str:
-        """번역용 시스템 프롬프트 로드"""
-        return """You are an expert Korean translator specializing in subtitle localization for YouTube videos. Your task is to translate English subtitles into Korean, ensuring high-quality, natural-sounding translations that are easily understood by native Korean speakers.
-
-Follow these instructions to complete the translation:
-
-1. Read through the entire set of English subtitles to understand the context and flow of the video content.
-
-2. Translate each subtitle from English to Korean, adhering to these guidelines:
-   a. Ensure each Korean subtitle is no longer than 30 characters. If a translation exceeds this limit, split it into two or more subtitles and adjust the timing accordingly.
-   b. Use appropriate honorifics and formality levels based on the context of the video.
-   c. Adapt any culturally specific references or idioms to Korean equivalents that convey the same meaning.
-   d. For terms that are better left in English (e.g., brand names, technical terms), use the original English term followed by a brief Korean explanation in parentheses if necessary.
-   e. Use line breaks to improve readability, considering the natural flow of the Korean language.
-
-3. Consider the context of surrounding subtitles to ensure your translations are coherent and natural-sounding when viewed in sequence.
-
-4. Format your translation in SRT structure, maintaining the original numbering and timing where possible. When splitting subtitles, use incremental numbering (e.g., 3, 3a, 3b) and adjust timestamps accordingly.
-
-5. Review your translation for accuracy, naturalness, and proper formatting before submitting your final output.
-
-For complex or challenging subtitles, conduct your analysis within <subtitle_analysis> tags using the following process:
-
-1. Original English: [Insert original English subtitle]
-2. Key phrases/concepts: [Break down the subtitle into main ideas or phrases]
-3. Initial translations:
-   - Phrase 1: [Provide multiple Korean translation options]
-   - Phrase 2: [Provide multiple Korean translation options]
-   ...
-4. Word choice reasoning: [Explain why you chose specific Korean words or expressions]
-5. Video context consideration: [Describe how the video context affects your translation choices]
-6. Character count: [Count characters in the proposed translation]
-7. Adjustments (if needed):
-   - Split subtitle: [Show how you'd split the subtitle if over 30 characters]
-   - Revised timing: [Provide adjusted timestamps for split subtitles]
-8. Cultural adaptations: [Explain any cultural references you adapted]
-9. Final translation: [Provide the final Korean translation(s) with timing]
-
-Use this process for any subtitles that require special attention or are particularly challenging to translate.
-
-Your final output should be in the following format:
-
-<korean_subtitles>
-1
-[start time] --> [end time]
-[Korean translation (≤30 characters, 1 sentense)]
-
-2
-[start time] --> [end time]
-[Korean translation (≤30 characters, 1 sentense)]
-
-...
-</korean_subtitles>
-
-Remember to prioritize natural, easily understandable Korean translations while adhering to the 30-character limit and considering the context of the entire video."""
     
     def translate_batch(self, batch: str, start_number: int) -> Tuple[str, int, int]:
         """
@@ -453,13 +473,9 @@ Remember to prioritize natural, easily understandable Korean translations while 
     
             translated_text = message.content[0].text
             
-            # <korean_subtitles> 태그 사이의 내용 추출
-            try:
-                korean_subtitles = translated_text.split('<korean_subtitles>')[1].split('</korean_subtitles>')[0].strip()
-                return korean_subtitles + '\n\n', input_tokens, output_tokens
-            except IndexError:
-                self.logger.warning("번역된 텍스트에서 <korean_subtitles> 태그를 찾을 수 없습니다. 전체 응답을 반환합니다.")
-                return translated_text + '\n\n', input_tokens, output_tokens
+            # 자막 내용 추출
+            korean_subtitles = self._extract_korean_subtitles(translated_text)
+            return korean_subtitles, input_tokens, output_tokens
                 
         except anthropic.APIError as e:
             self.logger.error(f"Claude API 오류: {e}")
@@ -467,6 +483,199 @@ Remember to prioritize natural, easily understandable Korean translations while 
         except Exception as e:
             self.logger.error(f"번역 중 오류 발생: {e}")
             raise
+
+
+class OpenAITranslator(BaseTranslator):
+    """OpenAI API를 이용한 번역 처리 클래스"""
+    
+    def __init__(self, config: SubtitleTranslationConfig):
+        super().__init__(config)
+        self.api_key = self._get_api_key()
+        self.client = openai.OpenAI(api_key=self.api_key)
+        
+        # 모델별 지원되지 않는 파라미터를 캐시
+        self.unsupported_params = set()
+
+    def _load_system_prompt(self) -> str:
+        """OpenAI 전용: 품질 튜닝을 위한 추가 지침/예시 포함"""
+        base = super()._load_system_prompt()
+        tuning = """
+
+Style guide:
+- Prefer clear, complete sentences ending with “-습니다/었습니다/입니다”.
+- Avoid noun-ending fragments (e.g., “...날.”). Rewrite as a full sentence (e.g., “...날이었습니다.”).
+- Avoid literal calques; use natural Korean phrasing.
+
+Examples (do NOT include in output):
+<example>
+<source>
+1
+00:00:00,240 --> 00:00:12,040
+Because yesterday was the day the human intelligence monopoly officially ended.
+</source>
+<target>
+1
+00:00:00,240 --> 00:00:12,040
+어제는 인간 지능의 독점이 공식적으로 끝난 날이었습니다.
+</target>
+</example>
+"""
+        return base + tuning
+    
+    def _get_api_key(self) -> str:
+        """
+        환경 변수에서 OpenAI API 키를 가져옴
+        
+        Returns:
+            API 키
+            
+        Raises:
+            ValueError: API 키가 설정되지 않은 경우
+        """
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            self.logger.error("환경 변수 'OPENAI_API_KEY'가 설정되지 않았습니다.")
+            raise ValueError("환경 변수 'OPENAI_API_KEY'가 설정되지 않았습니다. "
+                            "export OPENAI_API_KEY=your_api_key 명령으로 API 키를 설정해주세요.")
+        return api_key
+    
+    def _create_api_params(self, batch: str) -> dict:
+        """API 호출 파라미터를 생성하고 지원되지 않는 파라미터를 제거"""
+        api_params = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": batch}
+            ]
+        }
+        
+        # 이전에 지원되지 않는다고 확인된 파라미터들은 제외
+        if "temperature" not in self.unsupported_params:
+            api_params["temperature"] = 0.2
+        if "top_p" not in self.unsupported_params:
+            api_params["top_p"] = 0.9
+        if "presence_penalty" not in self.unsupported_params:
+            api_params["presence_penalty"] = 0.0
+        if "frequency_penalty" not in self.unsupported_params:
+            api_params["frequency_penalty"] = 0.0
+        if "seed" not in self.unsupported_params:
+            api_params["seed"] = 42
+        
+        if self.config.max_tokens > 0:
+            if "max_tokens" not in self.unsupported_params:
+                api_params["max_tokens"] = self.config.max_tokens
+            else:
+                # 일부 모델(o1/o3/Responses API)은 max_completion_tokens 사용
+                api_params["max_completion_tokens"] = self.config.max_tokens
+            
+        return api_params
+    
+    def translate_batch(self, batch: str, start_number: int) -> Tuple[str, int, int]:
+        """
+        주어진 배치의 자막을 번역
+        
+        Args:
+            batch: 번역할 자막 배치
+            start_number: 시작 자막 번호
+            
+        Returns:
+            (번역된 자막, 입력 토큰 수, 출력 토큰 수)
+            
+        Raises:
+            Exception: 번역 중 오류가 발생한 경우
+        """
+        if not batch.strip():
+            return "", 0, 0
+            
+        try:
+            api_params = self._create_api_params(batch)
+            response = self.client.chat.completions.create(**api_params)
+    
+            # 토큰 사용량 추출
+            usage = response.usage
+            input_tokens = usage.prompt_tokens
+            output_tokens = usage.completion_tokens
+    
+            translated_text = response.choices[0].message.content
+            
+            # 자막 내용 추출
+            korean_subtitles = self._extract_korean_subtitles(translated_text)
+            return korean_subtitles, input_tokens, output_tokens
+                
+        except openai.APIError as e:
+            error_str = str(e)
+            
+            # 지원되지 않는 파라미터 에러 처리
+            if "Unsupported parameter" in error_str or "Unsupported value" in error_str:
+                # 어떤 파라미터가 문제인지 파악
+                if "temperature" in error_str:
+                    self.unsupported_params.add("temperature")
+                    self.logger.info(f"모델 {self.config.model}에서 temperature 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "max_tokens" in error_str:
+                    self.unsupported_params.add("max_tokens")
+                    self.logger.info(f"모델 {self.config.model}에서 max_tokens 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "max_completion_tokens" in error_str:
+                    self.unsupported_params.add("max_completion_tokens")
+                    self.logger.info(f"모델 {self.config.model}에서 max_completion_tokens 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "top_p" in error_str:
+                    self.unsupported_params.add("top_p")
+                    self.logger.info(f"모델 {self.config.model}에서 top_p 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "presence_penalty" in error_str:
+                    self.unsupported_params.add("presence_penalty")
+                    self.logger.info(f"모델 {self.config.model}에서 presence_penalty 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "frequency_penalty" in error_str:
+                    self.unsupported_params.add("frequency_penalty")
+                    self.logger.info(f"모델 {self.config.model}에서 frequency_penalty 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                elif "seed" in error_str:
+                    self.unsupported_params.add("seed")
+                    self.logger.info(f"모델 {self.config.model}에서 seed 파라미터를 지원하지 않습니다. 제거 후 재시도합니다.")
+                
+                # 파라미터를 제거하고 재시도
+                api_params = self._create_api_params(batch)
+                response = self.client.chat.completions.create(**api_params)
+                
+                # 토큰 사용량 추출
+                usage = response.usage
+                input_tokens = usage.prompt_tokens
+                output_tokens = usage.completion_tokens
+        
+                translated_text = response.choices[0].message.content
+                
+                # 자막 내용 추출
+                korean_subtitles = self._extract_korean_subtitles(translated_text)
+                return korean_subtitles, input_tokens, output_tokens
+            else:
+                self.logger.error(f"OpenAI API 오류: {e}")
+                raise
+        except Exception as e:
+            self.logger.error(f"번역 중 오류 발생: {e}")
+            raise
+
+
+class TranslatorFactory:
+    """번역기 팩토리 클래스"""
+    
+    @staticmethod
+    def create_translator(config: SubtitleTranslationConfig) -> BaseTranslator:
+        """
+        설정에 따라 적절한 번역기 인스턴스 생성
+        
+        Args:
+            config: 번역 설정
+            
+        Returns:
+            번역기 인스턴스
+            
+        Raises:
+            ValueError: 지원하지 않는 제공업체인 경우
+        """
+        if config.provider == "claude":
+            return ClaudeTranslator(config)
+        elif config.provider == "openai":
+            return OpenAITranslator(config)
+        else:
+            raise ValueError(f"지원하지 않는 제공업체입니다: {config.provider}. "
+                           "사용 가능한 제공업체: claude, openai")
 
 
 class SubtitleTranslator:
@@ -477,7 +686,7 @@ class SubtitleTranslator:
         self.logger = logging.getLogger(__name__)
         self.file_handler = SubtitleFileHandler()
         self.processor = SubtitleProcessor()
-        self.translator = ClaudeTranslator(config)
+        self.translator = TranslatorFactory.create_translator(config)
         
         # 토큰 사용량 추적 변수
         self.total_input_tokens = 0
@@ -635,6 +844,7 @@ def generate_default_config(config: SubtitleTranslationConfig):
     """현재 설정으로 기본 설정 파일 생성"""
     config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.DEFAULT_CONFIG_FILE)
     config_data = {
+        "provider": config.provider,
         "model": config.model,
         "batch_size": config.batch_size,
         "max_tokens": config.max_tokens,

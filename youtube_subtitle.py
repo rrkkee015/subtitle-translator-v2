@@ -6,6 +6,9 @@ import re
 import time
 import logging
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,46 +62,51 @@ def download_video(youtube_url):
     return filename
 
 def extract_subtitle(video_filename):
-    """AssemblyAI를 사용하여 동영상에서 자막을 추출합니다."""
+    """AssemblyAI Python API를 사용하여 동영상에서 자막을 추출합니다."""
     if not video_filename or not os.path.exists(video_filename):
         logger.error(f"파일을 찾을 수 없습니다: {video_filename}")
         return None
     
     logger.info(f"자막 추출 중: {video_filename}")
     
-    # AssemblyAI 명령어 실행
-    result = subprocess.run(
-        ["assemblyai", "transcribe", video_filename, "--srt"],
-        capture_output=True,
-        text=True
-    )
-    
-    if result.returncode != 0:
-        logger.error(f"자막 추출 실패: {result.stderr}")
-        return None
-    
-    # 출력에서 생성된 SRT 파일명 추출
-    output = result.stdout
-    match = re.search(r'Successfully created file ([a-zA-Z0-9-]+\.srt)', output)
-    
-    if not match:
-        logger.error("생성된 SRT 파일명을 찾을 수 없습니다.")
-        return None
-    
-    srt_filename = match.group(1)
-    
-    # 동영상 파일명과 동일하게 SRT 파일명 변경
-    base_filename = os.path.splitext(video_filename)[0]
-    new_srt_filename = f"{base_filename}.srt"
-    
     try:
-        os.rename(srt_filename, new_srt_filename)
-        logger.info(f"SRT 파일명 변경: {srt_filename} -> {new_srt_filename}")
-    except Exception as e:
-        logger.error(f"SRT 파일명 변경 실패: {e}")
+        import assemblyai as aai
+        
+        # API 키 확인 (환경변수에서)
+        api_key = os.getenv('ASSEMBLYAI_API_KEY')
+        if not api_key:
+            logger.error("ASSEMBLYAI_API_KEY 환경변수가 설정되지 않았습니다.")
+            return None
+        
+        aai.settings.api_key = api_key
+        
+        # 동영상 파일을 업로드하고 전사 요청
+        logger.info("동영상 파일을 업로드하고 전사를 요청합니다...")
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(video_filename)
+        
+        if transcript.status == aai.TranscriptStatus.error:
+            logger.error(f"전사 실패: {transcript.error}")
+            return None
+        
+        # SRT 형식으로 자막 생성
+        base_filename = os.path.splitext(video_filename)[0]
+        srt_filename = f"{base_filename}.srt"
+        
+        # SRT 형식으로 자막 저장
+        srt_content = transcript.export_subtitles_srt()
+        with open(srt_filename, 'w', encoding='utf-8') as f:
+            f.write(srt_content)
+        
+        logger.info(f"자막 파일 생성 완료: {srt_filename}")
+        return srt_filename
+        
+    except ImportError:
+        logger.error("assemblyai 패키지가 설치되지 않았습니다.")
         return None
-    
-    return new_srt_filename
+    except Exception as e:
+        logger.error(f"자막 추출 중 오류 발생: {e}")
+        return None
 
 def translate_subtitle(srt_filename):
     """자막 파일을 한글로 번역합니다."""
